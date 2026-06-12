@@ -1,5 +1,8 @@
 # NIFTY-50 Investment Intelligence Platform
 
+Open Projects 2026 · AI / ML  ·  Team rukdimaxx Somil Agrawal (23112099) · S R Nivedhitha (22411030)
+
+
 An AI-powered **decision-support** platform built on the NIFTY-50 historical
 market dataset (Jan 2000 – Apr 2021). It goes beyond price prediction to deliver
 practical investment intelligence: a **stock predictor engine**, a **portfolio
