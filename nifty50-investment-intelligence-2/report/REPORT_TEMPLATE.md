@@ -2,8 +2,10 @@
 ### Technical Report — Open Projects 2026 (AI/ML)
 
 **Team:** Rukdimax ·
+
 **Team Members** - 
 S R Nivedhitha - 22411030 - Geophysical Technology - 4th Year
+
 Somil Agrawal - Chemical Engineering - 3rd Year
            
 **Repo:** [‹GitHub URL›](https://github.com/vinnie1e/nifty50-cult.git)
