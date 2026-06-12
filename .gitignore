@@ -20,3 +20,12 @@ nifty50-investment-intelligence-2/data/
 # Large reproducible artifacts
 nifty50-investment-intelligence-2/results/models/
 **/*.joblib
+
+# Non-deliverable / generated / intermediate artifacts (reproducible via the pipeline).
+# Per ps.md the repo keeps only deliverables: source, model files, config, docs, report PDF.
+/ps.md
+nifty50-investment-intelligence-2/report/report.html
+nifty50-investment-intelligence-2/report/REPORT_TEMPLATE.md
+nifty50-investment-intelligence-2/results/figures/
+nifty50-investment-intelligence-2/results/eda_insights.json
+nifty50-investment-intelligence-2/results/intelligence_report.json
