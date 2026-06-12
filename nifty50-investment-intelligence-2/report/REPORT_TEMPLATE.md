@@ -1,12 +1,12 @@
 # NIFTY-50 Investment Intelligence Platform
 ### Technical Report — Open Projects 2026 (AI/ML)
 
-**Team:** ‹name(s)› · **Department/Year:** ‹dept, year› · **Repo:** ‹GitHub URL›
-
-> **Finalising this report.** Run `python -m src.main ...` on the real dataset,
-> then replace every `‹…›` with values from `results/intelligence_report.json`
-> and figures from `results/figures/`. Keep to **12 pages**. Remove these
-> quote-blocks before exporting to PDF.
+**Team:** Rukdimax ·
+**Team Members** - 
+S R Nivedhitha - 22411030 - Geophysical Technology - 4th Year
+Somil Agrawal - Chemical Engineering - 3rd Year
+           
+**Repo:** [‹GitHub URL›](https://github.com/vinnie1e/nifty50-cult.git)
 
 ---
 
