@@ -7,7 +7,7 @@
 
 S R Nivedhitha - 22411030 - Geophysical Technology - 4th Year
 
-Somil Agrawal - Chemical Engineering - 3rd Year
+Somil Agrawal - 23112099 - Chemical Engineering - 3rd Year
            
 **Repo:** [‹GitHub URL›](https://github.com/vinnie1e/nifty50-cult.git)
 
