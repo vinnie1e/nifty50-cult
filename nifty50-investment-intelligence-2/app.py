@@ -26,8 +26,12 @@ from src.data_loader import load_market_data, synthetic_prices
 from src.features import add_all_indicators
 from src.predictor import predict_symbol
 from src.portfolio import construct_portfolios, sector_allocation
+from src.backtest import backtest_portfolios
 from src.risk import risk_profile
-from src.explain import feature_importance, explain_forecast, detect_anomalies
+from src.explain import (
+    feature_importance, permutation_feature_importance, explain_forecast,
+    detect_anomalies,
+)
 
 st.set_page_config(page_title="NIFTY-50 Investment Intelligence", layout="wide")
 
@@ -88,9 +92,21 @@ def main():
             c2.metric("MAE", f"{reg['MAE']:.4f}")
             c3.metric("R²", f"{reg['R2']:.3f}")
             c4.metric("Directional Acc.", f"{reg['DirectionalAccuracy']:.1%}")
+            st.caption(
+                f"Baseline (predict-zero) MAE = {reg['baseline_MAE_predict_zero']:.4f} · "
+                f"direction baseline (majority) = "
+                f"{res['classification']['baseline_majority_accuracy']:.1%}")
+            if "volatility" in res:
+                vol = res["volatility"]
+                st.markdown(
+                    f"**Volatility forecast ({vol['horizon_days']}d):** "
+                    f"MAE {vol['MAE']:.4f} vs persistence baseline "
+                    f"{vol['baseline_MAE_persistence']:.4f} (lower = better).")
             st.info(explain_forecast(res["models"]["regressor"], res["feature_columns"]))
-            imp = feature_importance(res["models"]["regressor"], res["feature_columns"])
-            st.bar_chart(pd.Series(imp).head(10))
+            st.caption("Permutation importance (model-agnostic, held-out):")
+            perm = permutation_feature_importance(
+                res["models"]["regressor"], res["_train"]["X"], res["_train"]["y"])
+            st.bar_chart(pd.Series(perm).head(10))
 
     # ---- Tab 3: Portfolio ----
     with tab3:
@@ -110,6 +126,22 @@ def main():
                     sec = sector_allocation(port, market)
                     if sec:
                         st.write("**Sector mix:**", sec)
+
+            st.divider()
+            st.subheader("Walk-forward backtest (out-of-sample)")
+            st.caption("Weights re-estimated quarterly on a trailing window only — "
+                       "no lookahead. Benchmarked against equal-weight.")
+            with st.spinner("Backtesting..."):
+                try:
+                    bt = backtest_portfolios(market.close_wide(), rf=rf)
+                    curves = pd.DataFrame({k: v for k, v in bt["equity_curves"].items()})
+                    st.line_chart(curves)
+                    st.dataframe(pd.DataFrame(bt["metrics"]).T, use_container_width=True)
+                    cfg = bt["config"]
+                    st.caption(f"OOS window {cfg['oos_start']} → {cfg['oos_end']} "
+                               f"({cfg['oos_days']} days, {cfg['n_universe']} names).")
+                except Exception as e:  # noqa: BLE001
+                    st.warning(f"Backtest unavailable: {e}")
 
     # ---- Tab 4: Risk & anomalies ----
     with tab4:

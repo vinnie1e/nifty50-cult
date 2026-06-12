@@ -69,6 +69,35 @@ class MarketData:
         return df.reset_index(drop=True)
 
 
+def _adjust_splits(df: pd.DataFrame, jump: float = 0.40) -> pd.DataFrame:
+    """Back-adjust prices for stock splits / bonus issues.
+
+    The Kaggle OHLCV is *unadjusted*, so a 1:2 split shows up as a spurious ~-50%
+    one-day "return". For NIFTY-50 large caps a genuine >40% single-day move is
+    essentially nonexistent, so we treat such jumps as corporate actions and
+    rescale all earlier prices onto the post-action scale (volume rescaled
+    inversely). This keeps returns, volatility, and the predictor honest.
+    """
+    df = df.sort_values("date").reset_index(drop=True)
+    close = df["close"].to_numpy(dtype=float)
+    n = len(close)
+    factor = np.ones(n)
+    cum = 1.0
+    for i in range(n - 1, 0, -1):
+        if close[i - 1] > 0:
+            ratio = close[i] / close[i - 1]
+            if ratio > 1 + jump or ratio < 1 - jump:
+                cum *= ratio
+        factor[i - 1] = cum
+    for col in ("open", "high", "low", "close"):
+        if col in df:
+            df[col] = df[col].to_numpy(dtype=float) * factor
+    if "volume" in df:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            df["volume"] = df["volume"].to_numpy(dtype=float) / np.where(factor == 0, 1, factor)
+    return df
+
+
 def _normalise_columns(df: pd.DataFrame, symbol_fallback: str) -> pd.DataFrame:
     out = {}
     for canon, options in _COLMAP.items():
@@ -88,19 +117,28 @@ def _normalise_columns(df: pd.DataFrame, symbol_fallback: str) -> pd.DataFrame:
     return res.dropna(subset=["close"]).reset_index(drop=True)
 
 
-def load_market_data(data_dir: str, symbols: list[str] | None = None) -> MarketData:
+def load_market_data(data_dir: str, symbols: list[str] | None = None,
+                     adjust_splits: bool = True) -> MarketData:
     csvs = glob.glob(os.path.join(data_dir, "*.csv"))
     meta_path = None
     frames = []
     for path in csvs:
         name = os.path.splitext(os.path.basename(path))[0]
-        if name.lower() in ("stock_metadata", "metadata", "nifty50"):
+        low = name.lower()
+        if low in ("stock_metadata", "metadata"):
             meta_path = path
+            continue
+        # skip combined / index files (e.g. NIFTY50_all.csv) — they repeat every
+        # symbol and would double-count against the per-symbol CSVs.
+        if low.startswith("nifty"):
             continue
         if symbols and name.upper() not in {s.upper() for s in symbols}:
             continue
         raw = pd.read_csv(path)
-        frames.append(_normalise_columns(raw, symbol_fallback=name.upper()))
+        frame = _normalise_columns(raw, symbol_fallback=name.upper())
+        if adjust_splits and len(frame) > 1:
+            frame = _adjust_splits(frame)
+        frames.append(frame)
 
     if not frames:
         raise FileNotFoundError(
@@ -124,6 +162,10 @@ def load_market_data(data_dir: str, symbols: list[str] | None = None) -> MarketD
             elif "industry" in c:
                 rename[c] = "industry"
         metadata = m.rename(columns=rename)
+        # the NIFTY-50 metadata ships an NSE macro-sector under "Industry" and no
+        # explicit "sector" column — use it so sector analysis works.
+        if "sector" not in metadata.columns and "industry" in metadata.columns:
+            metadata["sector"] = metadata["industry"].astype(str).str.title()
     return MarketData(prices=prices, metadata=metadata)
 
 

@@ -108,3 +108,23 @@ def build_supervised(df: pd.DataFrame, horizon: int = 5):
     y_return = data["fwd_return"]
     y_direction = (y_return > 0).astype(int)
     return X, y_return, y_direction, data["date"], cols
+
+
+def build_volatility_supervised(df: pd.DataFrame, horizon: int = 10):
+    """Supervised frame for volatility forecasting.
+
+    Target = annualised realised volatility over the NEXT `horizon` days. The
+    persistence baseline (trailing `horizon`-day realised vol) is returned too so
+    the forecaster can be judged against "tomorrow looks like today".
+    """
+    df = add_all_indicators(df)
+    ann = np.sqrt(252)
+    trailing_vol = df["return"].rolling(horizon).std() * ann      # info up to t
+    fwd_vol = trailing_vol.shift(-horizon)                        # realised over t+1..t+h
+    df = df.assign(_fwd_vol=fwd_vol, _persist_vol=trailing_vol)
+    cols = [c for c in FEATURE_COLUMNS if c in df.columns]
+    data = df.dropna(subset=cols + ["_fwd_vol", "_persist_vol"]).reset_index(drop=True)
+    X = data[cols]
+    y_vol = data["_fwd_vol"]
+    baseline = data["_persist_vol"]
+    return X, y_vol, baseline, data["date"], cols

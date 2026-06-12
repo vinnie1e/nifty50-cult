@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+
+# Dataset (download from Kaggle per README — not redistributed)
+data/
+
+# Generated artifacts (reproducible via `python -m src.main`)
+results/models/
+results/*.joblib
+
+# Build archives
+*.zip

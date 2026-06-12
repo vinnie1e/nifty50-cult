@@ -1,0 +1,22 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Build archives / uploads
+*.zip
+
+# Dataset (download from Kaggle per README — not redistributed)
+nifty50-investment-intelligence-2/data/
+
+# Large reproducible artifacts
+nifty50-investment-intelligence-2/results/models/
+**/*.joblib

@@ -17,11 +17,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor, GradientBoostingClassifier
-from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import TimeSeriesSplit
 
-from .features import build_supervised
+from .features import build_supervised, build_volatility_supervised
+
+# shared estimator config — one source of truth for reproducibility
+_GBT_KW = dict(n_estimators=200, max_depth=3, learning_rate=0.05,
+               subsample=0.8, random_state=42)
 
 
 def _directional_accuracy(y_true, y_pred) -> float:
@@ -29,7 +32,11 @@ def _directional_accuracy(y_true, y_pred) -> float:
 
 
 def train_return_predictor(df: pd.DataFrame, horizon: int = 5, n_splits: int = 5):
-    """Forward-return regression with walk-forward CV. Returns metrics + fitted model."""
+    """Forward-return regression with walk-forward CV.
+
+    Returns ``(final_model, metrics, cols, X, y)`` — X/y are handed back so the
+    explainability layer can compute permutation importances on the same frame.
+    """
     X, y_ret, _, dates, cols = build_supervised(df, horizon=horizon)
     if len(X) < 100:
         raise ValueError("Not enough rows after feature construction.")
@@ -37,9 +44,7 @@ def train_return_predictor(df: pd.DataFrame, horizon: int = 5, n_splits: int = 5
     tscv = TimeSeriesSplit(n_splits=n_splits)
     maes, rmses, r2s, dir_accs, base_maes = [], [], [], [], []
     for tr, te in tscv.split(X):
-        model = GradientBoostingRegressor(
-            n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8,
-            random_state=42)
+        model = GradientBoostingRegressor(**_GBT_KW)
         model.fit(X.iloc[tr], y_ret.iloc[tr])
         pred = model.predict(X.iloc[te])
         true = y_ret.iloc[te].to_numpy()
@@ -49,11 +54,7 @@ def train_return_predictor(df: pd.DataFrame, horizon: int = 5, n_splits: int = 5
         dir_accs.append(_directional_accuracy(true, pred))
         base_maes.append(mean_absolute_error(true, np.zeros_like(true)))  # predict-0
 
-    # final model on all data for downstream use
-    final = GradientBoostingRegressor(
-        n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8,
-        random_state=42).fit(X, y_ret)
-
+    final = GradientBoostingRegressor(**_GBT_KW).fit(X, y_ret)
     metrics = {
         "task": "return_regression",
         "horizon_days": horizon,
@@ -64,7 +65,7 @@ def train_return_predictor(df: pd.DataFrame, horizon: int = 5, n_splits: int = 5
         "baseline_MAE_predict_zero": float(np.mean(base_maes)),
         "n_samples": int(len(X)),
     }
-    return final, metrics, cols
+    return final, metrics, cols, X, y_ret
 
 
 def train_direction_classifier(df: pd.DataFrame, horizon: int = 5, n_splits: int = 5):
@@ -76,9 +77,7 @@ def train_direction_classifier(df: pd.DataFrame, horizon: int = 5, n_splits: int
     tscv = TimeSeriesSplit(n_splits=n_splits)
     accs, base_accs = [], []
     for tr, te in tscv.split(X):
-        clf = GradientBoostingClassifier(
-            n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8,
-            random_state=42)
+        clf = GradientBoostingClassifier(**_GBT_KW)
         clf.fit(X.iloc[tr], y_dir.iloc[tr])
         pred = clf.predict(X.iloc[te])
         true = y_dir.iloc[te].to_numpy()
@@ -86,9 +85,7 @@ def train_direction_classifier(df: pd.DataFrame, horizon: int = 5, n_splits: int
         majority = int(round(y_dir.iloc[tr].mean()))
         base_accs.append(float(np.mean(true == majority)))
 
-    final = GradientBoostingClassifier(
-        n_estimators=200, max_depth=3, learning_rate=0.05, subsample=0.8,
-        random_state=42).fit(X, y_dir)
+    final = GradientBoostingClassifier(**_GBT_KW).fit(X, y_dir)
     metrics = {
         "task": "direction_classification",
         "horizon_days": horizon,
@@ -99,15 +96,62 @@ def train_direction_classifier(df: pd.DataFrame, horizon: int = 5, n_splits: int
     return final, metrics, cols
 
 
-def predict_symbol(market, symbol: str, horizon: int = 5):
-    """Convenience: train both predictors for one symbol and return their metrics."""
+def train_volatility_forecaster(df: pd.DataFrame, horizon: int = 10, n_splits: int = 5):
+    """Forecast forward realised volatility with walk-forward CV.
+
+    Baseline is *persistence* (next-period vol = current trailing vol). Beating
+    it is the bar that proves the model captures volatility clustering rather
+    than just echoing today's level.
+    """
+    X, y_vol, baseline, dates, cols = build_volatility_supervised(df, horizon=horizon)
+    if len(X) < 100:
+        raise ValueError("Not enough rows after feature construction.")
+
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    maes, rmses, r2s, base_maes = [], [], [], []
+    for tr, te in tscv.split(X):
+        model = GradientBoostingRegressor(**_GBT_KW)
+        model.fit(X.iloc[tr], y_vol.iloc[tr])
+        pred = model.predict(X.iloc[te])
+        true = y_vol.iloc[te].to_numpy()
+        maes.append(mean_absolute_error(true, pred))
+        rmses.append(np.sqrt(mean_squared_error(true, pred)))
+        r2s.append(r2_score(true, pred))
+        base_maes.append(mean_absolute_error(true, baseline.iloc[te].to_numpy()))
+
+    final = GradientBoostingRegressor(**_GBT_KW).fit(X, y_vol)
+    metrics = {
+        "task": "volatility_forecast",
+        "horizon_days": horizon,
+        "MAE": float(np.mean(maes)),
+        "RMSE": float(np.mean(rmses)),
+        "R2": float(np.mean(r2s)),
+        "baseline_MAE_persistence": float(np.mean(base_maes)),
+        "n_samples": int(len(X)),
+    }
+    return final, metrics, cols
+
+
+def predict_symbol(market, symbol: str, horizon: int = 5,
+                   vol_horizon: int = 10, with_volatility: bool = True):
+    """Train the predictor suite for one symbol and return metrics + fitted models."""
     df = market.for_symbol(symbol)
-    reg_model, reg_metrics, cols = train_return_predictor(df, horizon)
+    reg_model, reg_metrics, cols, X_reg, y_reg = train_return_predictor(df, horizon)
     clf_model, clf_metrics, _ = train_direction_classifier(df, horizon)
-    return {
+
+    out = {
         "symbol": symbol,
         "regression": reg_metrics,
         "classification": clf_metrics,
         "models": {"regressor": reg_model, "classifier": clf_model},
         "feature_columns": cols,
+        "_train": {"X": X_reg, "y": y_reg},   # for permutation importance
     }
+    if with_volatility:
+        try:
+            vol_model, vol_metrics, _ = train_volatility_forecaster(df, vol_horizon)
+            out["volatility"] = vol_metrics
+            out["models"]["volatility"] = vol_model
+        except ValueError:
+            pass
+    return out
