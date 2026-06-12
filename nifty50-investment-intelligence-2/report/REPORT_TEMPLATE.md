@@ -3,7 +3,8 @@
 
 **Team:** Rukdimax ·
 
-**Team Members** - 
+**Team Members** -
+
 S R Nivedhitha - 22411030 - Geophysical Technology - 4th Year
 
 Somil Agrawal - Chemical Engineering - 3rd Year
